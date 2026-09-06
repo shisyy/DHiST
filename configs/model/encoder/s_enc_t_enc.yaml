@@ -1,0 +1,18 @@
+name: TemporalFeatEnc+SABlock
+_target_: mlp.model.encoder.s_enc_t_enc.FactorisedSTEncoder
+
+dim: ${model.latent_dim}
+max_snippet_len: ${model.nums_snippet}
+num_heads: ${model.num_heads}
+num_layers: ${model.num_layers}
+drop_rate: ${model.dropout}
+shared: ${model.shared}
+start_label_ratio: 1.0
+label_anneal_fraction: 0.125
+qahs_gate_floor: 0.0
+dataset: ${data.dataname}
+gcn_layers: 7
+# ['none','init','fixed']
+adaptive: init
+# ['cls_token','weighted_pool','mean','max','sum']
+pooling: mean

@@ -1,0 +1,41 @@
+__pycache__/
+*.py[cod]
+*.so
+*.log
+*.tmp
+*.part
+.DS_Store
+.idea/
+.vscode/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Generated experiment artifacts
+outputs/
+checkpoints/
+runs/
+wandb/
+*.tfevents.*
+*.pkl
+*.pt
+*.pth
+*.ckpt
+
+# Keep released metadata and the small LoRA adapter, but not the 517 MB checkpoint.
+!artifacts/babel_35_3/adapter_model.safetensors
+!artifacts/babel_35_3/adapter_config.json
+
+# Licensed datasets, derived features, and downloaded text encoders.
+datasets/*
+!datasets/README.md
+!datasets/babel/
+datasets/babel/*
+!datasets/babel/splits/
+!datasets/babel/splits/*.txt
+deps/
+glove/
+visuals/

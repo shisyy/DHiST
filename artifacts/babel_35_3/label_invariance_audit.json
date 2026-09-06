@@ -1,0 +1,26 @@
+{
+  "actual_vs_random": {
+    "grounding_end_loc": 0.0,
+    "grounding_start_loc": 0.0,
+    "h_score": 0.0,
+    "uni_e_score": 0.0,
+    "uni_h_score": 0.0,
+    "uni_s_score": 0.0
+  },
+  "actual_vs_zero": {
+    "grounding_end_loc": 0.0,
+    "grounding_start_loc": 0.0,
+    "h_score": 0.0,
+    "uni_e_score": 0.0,
+    "uni_h_score": 0.0,
+    "uni_s_score": 0.0
+  },
+  "zero_vs_random": {
+    "grounding_end_loc": 0.0,
+    "grounding_start_loc": 0.0,
+    "h_score": 0.0,
+    "uni_e_score": 0.0,
+    "uni_h_score": 0.0,
+    "uni_s_score": 0.0
+  }
+}

@@ -1,0 +1,181 @@
+model:
+  motion:
+    name: motion_conv_encoder
+    _target_: mlp.model.motion.mo_conv.MotionSpatioConvEncoder
+    latent_dim: ${model.latent_dim}
+    dropout: ${model.dropout}
+    dataset: ${data.dataname}
+    data_rep: ${model.data_rep}
+  text:
+    name: textencoder_roberta
+    _target_: mlp.model.text.roberta.RobertaEncoder
+    latent_dim: ${model.latent_dim}
+    drop_rate: ${model.dropout}
+    out_dim: ${model.latent_dim}
+    modelpath: ${path.deps}/roberta-base
+    finetune: ${model.finetune}
+  encoder:
+    name: TemporalFeatEnc+SABlock
+    _target_: mlp.model.encoder.s_enc_t_enc.FactorisedSTEncoder
+    dim: ${model.latent_dim}
+    max_snippet_len: ${model.nums_snippet}
+    num_heads: ${model.num_heads}
+    num_layers: ${model.num_layers}
+    drop_rate: ${model.dropout}
+    shared: ${model.shared}
+    dataset: ${data.dataname}
+    gcn_layers: 7
+    adaptive: init
+    pooling: mean
+  losses:
+    use_highlight_loss: true
+    highlight_loss_func: ${model.func_highlight}
+    grounding_loss_func: ${model.func_grounding}
+    use_dn_loss: true
+    dn_loss_func: ${model.func_dn}
+    dn_kl_loss_func: ${model.func_dn_kl}
+  optim:
+    name: server for babel dataset
+    use_gpu: true
+    batch_size: 64
+    optimizer_type: AdamW
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.01
+    num_workers: 4
+    num_epochs: 100
+    learning_rate: 0.0002
+    clip_norm: 0.1
+    warmup_proportion: 0.0
+    scheduler_type: step
+    decay_step: 50
+    decay_factor: 0.5
+    vis_every: 200
+    vis_nsamples: 4
+    curriculum_learning_at: -1
+    evaluate_after: -1
+    every_eval: 1
+    after_eval: 0
+    print_every: 200
+    dataname: ${data.dataname}
+  func_grounding:
+    name: cross entropy loss
+    _target_: mlp.losses.ce_loss.CrossEntropyLoss
+    pred_lambda: ${model.pred_lambda}
+  func_dn:
+    name: cross entropy loss
+    _target_: mlp.losses.dn_ce_loss.CrossEntropyLoss
+    pred_lambda: ${model.pred_lambda}
+  func_dn_kl:
+    name: kl loss
+    _target_: mlp.losses.dn_kl_loss.KLLoss
+    kl_lambda: ${model.kl_lambda}
+    t: 1.0
+  func_highlight:
+    name: highlight_loss
+    _target_: mlp.losses.highlight_loss.HighLightLoss
+    highlight_lambda: ${model.highlight_lambda}
+  cq_attention:
+    modelname: cq_attention
+    _target_: mlp.model.blocks.attention.CQAttention
+    dim: ${model.latent_dim}
+    drop_rate: ${model.dropout}
+  cq_concatenate:
+    modelname: cq_concatenate
+    _target_: mlp.model.blocks.attention.CQConcatenate
+    dim: ${model.latent_dim}
+  highlight_layer:
+    name: label_prior_sequence_matcher
+    _target_: mlp.model.blocks.matcher.LabelPriorSequenceMatcher
+    dim: ${model.latent_dim}
+    label_size: 3
+    max_snippet_len: ${model.nums_snippet}
+    drop_rate: ${model.dropout}
+    kernel_size: 1
+    sampling_type: scheduled
+    scheduled_sampling_limit: 1.0
+    mask_ratio: ${model.alpha}
+    mask_type: structured_frame
+  predictor:
+    _target_: mlp.model.blocks.pred.LabelPriorPredictor
+    dim: ${model.latent_dim}
+    drop_rate: ${model.dropout}
+    mask_ratio: ${model.beta}
+  name: temporal_motion_localization
+  _target_: mlp.model.mlp.MLP
+  data_rep: cont_6d_plus_rifke_plus_velocity
+  training_checked: false
+  eval_checked: false
+  save_pred: false
+  latent_dim: 256
+  nums_snippet: 256
+  finetune: true
+  alpha: 0.8
+  beta: 0.1
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  activation: gelu
+  shared: true
+  pred_lambda: 1.0
+  highlight_lambda: 5.0
+  kl_lambda: 1.0
+data:
+  dataname: babel
+  _target_: mlp.data.babel.BabelDataset
+  datapath: ${path.datasets}/motions/guoh3dfeats
+  labelpath: ${path.datasets}/${data.dataname}
+  threshold: 0.995
+  training_checked: ${model.training_checked}
+  t2s_model:
+    _target_: mlp.model.text.sent_enc.SentenceEncoder
+    modelpath: ${path.deps}/all-mpnet-base-v2
+    device: cuda
+  nums_snippet: ${model.nums_snippet}
+  in_memory: true
+  contain_extra: true
+  prediction_only_labels: true
+  before_norm: false
+  batch_size: ${machine.batch_size}
+  num_workers: ${machine.num_workers}
+  debug: ${debug}
+machine:
+  name: server for babel dataset
+  use_gpu: true
+  batch_size: 64
+  optimizer_type: AdamW
+  betas:
+  - 0.9
+  - 0.999
+  weight_decay: 0.01
+  num_workers: 4
+  num_epochs: 100
+  learning_rate: 0.0002
+  clip_norm: 0.1
+  warmup_proportion: 0.0
+  scheduler_type: step
+  decay_step: 50
+  decay_factor: 0.5
+  vis_every: 200
+  vis_nsamples: 4
+  curriculum_learning_at: -1
+  evaluate_after: -1
+  every_eval: 1
+  after_eval: 0
+  print_every: 200
+  dataname: ${data.dataname}
+path:
+  datasets: ${code_path:./datasets}
+  deps: ${code_path:./deps}
+  code_dir: ${code_path:}
+  working_dir: ${working_path:""}
+  glove_dir: ${code_path:./glove}
+  vocab_path: ${path.glove_dir}/babel_v1.0_release_vocab.pkl
+experiment: mlp
+resume: ''
+seed: 42
+logging:
+  print_level: INFO
+  write_level: INFO
+debug: false

@@ -1,0 +1,43 @@
+{
+  "status": "completed",
+  "checkpoint": {
+    "release_asset": "dhist_babel_35_3_epoch94.ckpt.pkl",
+    "size_bytes": 45428296,
+    "sha256": "e014dcc8ec165bb9b0b2aa15d834e2fceddbf37c1fcd185c5de404e1bb233f83",
+    "format": "dhist-lora-compact-v1",
+    "frozen_text_backbone": "roberta-base",
+    "epoch_field": 94,
+    "iteration_field": 37479
+  },
+  "metrics": {
+    "R1-0.1": 51.9542126430855,
+    "R1-0.3": 45.240796122512116,
+    "R1-0.5": 38.0839434876766,
+    "R1-0.7": 29.668969784469425,
+    "R1-0.9": 13.004021862431681,
+    "R5-0.1": 56.62576054449829,
+    "R5-0.3": 49.73703207177478,
+    "R5-0.5": 42.817366195730635,
+    "R5-0.7": 35.10364030112406,
+    "R5-0.9": 19.243064865422298,
+    "mIoU": 35.40626976793494,
+    "R5-mIoU": 40.475463096518375
+  },
+  "protocol": {
+    "dataset": "BABEL",
+    "split": "validation-selected project protocol",
+    "inference_label_strategy": "zeros",
+    "label_noise_at_inference": false,
+    "dropout_at_inference": false,
+    "model_decoder_gt_boundary_inputs": false,
+    "ground_truth_usage": "metric computation only",
+    "decoder_inputs": "predicted LP logits and predicted highlight scores only",
+    "segment_iou_source": "highlight",
+    "segment_score_mode": "soft_iou",
+    "segment_iou_weight": 40.0,
+    "segment_masklog_weight": 12.0,
+    "single_checkpoint": true,
+    "ensemble": false
+  },
+  "label_invariance_all_maxdiff_zero": true
+}
