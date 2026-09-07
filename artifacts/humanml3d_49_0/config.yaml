@@ -1,0 +1,224 @@
+model:
+  motion:
+    name: motion_conv_encoder
+    _target_: mlp.model.motion.mo_conv.MotionSpatioConvEncoder
+    latent_dim: 256
+    dropout: 0.1
+    dataset: humanml3d
+    data_rep: cont_6d_plus_rifke_plus_velocity
+  text:
+    name: textencoder_roberta
+    _target_: mlp.model.text.roberta.RobertaEncoder
+    latent_dim: 256
+    drop_rate: 0.1
+    out_dim: 256
+    modelpath: ${path.deps}/roberta-base
+    finetune: true
+  encoder:
+    name: TemporalFeatEnc+SABlock
+    _target_: mlp.model.encoder.s_enc_t_enc.FactorisedSTEncoder
+    dim: 256
+    max_snippet_len: 256
+    num_heads: 4
+    num_layers: 2
+    drop_rate: 0.1
+    shared: true
+    dataset: humanml3d
+    gcn_layers: 7
+    adaptive: init
+    pooling: mean
+    label_teacher_ratio: 1.0
+  losses:
+    use_highlight_loss: true
+    highlight_loss_func:
+      name: highlight_loss
+      _target_: mlp.losses.highlight_loss.HighLightLoss
+      highlight_lambda: 5.0
+      uni_lambda: 0.5
+      uni_mse_lambda: 10.0
+    grounding_loss_func:
+      name: cross entropy loss
+      _target_: mlp.losses.cross_entropy_loss.CrossEntropyLoss
+      pred_lambda: 1.0
+      boundary_smoothing_sigma: 3.0
+      expected_iou_lambda: 0.0
+    use_dn_loss: true
+    dn_loss_func:
+      name: cross entropy loss
+      _target_: mlp.losses.dn_ce_loss.CrossEntropyLoss
+      pred_lambda: 1.0
+    dn_kl_loss_func:
+      name: kl loss
+      _target_: mlp.losses.dn_kl_loss.KLLoss
+      kl_lambda: 1.0
+      t: 1.0
+      detach_recovery_teacher: false
+      mask_strategy: valid
+  optim:
+    name: HumanML3D release
+    use_gpu: true
+    batch_size: 64
+    optimizer_type: AdamW
+    betas: [0.9, 0.999]
+    weight_decay: 0.01
+    num_workers: 4
+    num_epochs: 25
+    learning_rate: 0.0002
+    clip_norm: 0.1
+    warmup_proportion: 0.0
+    scheduler_type: step
+    decay_step: 50
+    decay_factor: 0.5
+    vis_every: 200
+    vis_nsamples: 4
+    curriculum_learning_at: -1
+    evaluate_after: -1
+    every_eval: 1
+    after_eval: 0
+    print_every: 200
+    dataname: humanml3d
+  func_grounding:
+    name: cross entropy loss
+    _target_: mlp.losses.cross_entropy_loss.CrossEntropyLoss
+    pred_lambda: 1.0
+    boundary_smoothing_sigma: 3.0
+    expected_iou_lambda: 0.0
+  func_dn:
+    name: cross entropy loss
+    _target_: mlp.losses.dn_ce_loss.CrossEntropyLoss
+    pred_lambda: 1.0
+  func_dn_kl:
+    name: kl loss
+    _target_: mlp.losses.dn_kl_loss.KLLoss
+    kl_lambda: 1.0
+    t: 1.0
+    detach_recovery_teacher: false
+    mask_strategy: valid
+  func_highlight:
+    name: highlight_loss
+    _target_: mlp.losses.highlight_loss.HighLightLoss
+    highlight_lambda: 5.0
+    uni_lambda: 0.5
+    uni_mse_lambda: 10.0
+  cq_attention:
+    modelname: cq_attention
+    _target_: mlp.model.blocks.attention.CQAttention
+    dim: 256
+    drop_rate: 0.1
+  cq_concatenate:
+    modelname: cq_concatenate
+    _target_: mlp.model.blocks.attention.CQConcatenate
+    dim: 256
+  highlight_layer:
+    name: label_prior_sequence_matcher
+    _target_: mlp.model.blocks.matcher.LabelPriorSequenceMatcher
+    dim: 256
+    label_size: 3
+    max_snippet_len: 256
+    drop_rate: 0.1
+    kernel_size: 1
+    sampling_type: scheduled
+    scheduled_sampling_limit: 1.0
+    mask_ratio: 0.8
+    mask_type: structured_frame
+  predictor:
+    _target_: mlp.model.blocks.pred.LabelPriorPredictor
+    dim: 256
+    drop_rate: 0.1
+    mask_ratio: 0.1
+    use_end_label_branch: false
+  name: temporal_motion_localization
+  _target_: mlp.model.mlp.MLP
+  data_rep: cont_6d_plus_rifke_plus_velocity
+  training_checked: false
+  eval_checked: false
+  save_pred: false
+  latent_dim: 256
+  nums_snippet: 256
+  finetune: true
+  preserve_pretrained_text: true
+  alpha: 0.8
+  beta: 0.1
+  use_label_prior_teacher: false
+  label_teacher_ratio: 1.0
+  uni_lambda: 0.5
+  uni_mse_lambda: 10.0
+  inference_label_strategy: zeros
+  use_end_label_branch: false
+  detach_recovery_teacher: false
+  kl_mask_strategy: valid
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  activation: gelu
+  shared: true
+  pred_lambda: 1.0
+  highlight_lambda: 5.0
+  kl_lambda: 1.0
+  boundary_smoothing_sigma: 3.0
+  expected_iou_lambda: 0.0
+  selection_metric: mIoU
+  qahs_boundary_logit_weight: 0.0
+  segment_iou_weight: 0.0
+  segment_iou_source: qahs
+  segment_score_mode: soft_iou
+  segment_masklog_weight: 0.0
+data:
+  dataname: humanml3d
+  _target_: mlp.data.humanml3d.H3DDataset
+  datapath: ${path.datasets}/motions/guoh3dfeats
+  labelpath: ${path.datasets}/humanml3d
+  cache_root: ${data.labelpath}/cache
+  all_h_label_mode: sigmoid_count
+  threshold: 0.8
+  training_checked: false
+  t2s_model:
+    _target_: mlp.model.text.sent_enc.SentenceEncoder
+    modelpath: ${path.deps}/all-mpnet-base-v2
+    device: cuda
+  nums_snippet: 256
+  in_memory: true
+  prediction_only_labels: true
+  before_norm: false
+  batch_size: 64
+  num_workers: 4
+  debug: false
+machine:
+  name: HumanML3D release
+  use_gpu: true
+  batch_size: 64
+  optimizer_type: AdamW
+  betas: [0.9, 0.999]
+  weight_decay: 0.01
+  num_workers: 4
+  num_epochs: 25
+  learning_rate: 0.0002
+  clip_norm: 0.1
+  warmup_proportion: 0.0
+  scheduler_type: step
+  decay_step: 50
+  decay_factor: 0.5
+  vis_every: 200
+  vis_nsamples: 4
+  curriculum_learning_at: -1
+  evaluate_after: -1
+  every_eval: 1
+  after_eval: 0
+  print_every: 200
+  dataname: humanml3d
+path:
+  datasets: ${code_path:./datasets}
+  deps: ${code_path:./deps}
+  code_dir: ${code_path:}
+  working_dir: ${working_path:""}
+  glove_dir: ${code_path:./glove}
+  vocab_path: ${path.glove_dir}/babel_v1.0_release_vocab.pkl
+experiment: humanml3d_babel_aligned_lora
+resume: ""
+eval_split: val
+seed: 123
+logging:
+  print_level: INFO
+  write_level: INFO
+debug: false
+train_split: train

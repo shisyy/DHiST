@@ -29,9 +29,12 @@ def train(config: DictConfig):
     """ Prepare data loader and model"""
     datamodule = config.data
     D = cmf.get_dataset(datamodule.dataname)
-    # Since babel does not have a test set, use the validation set as the test set
+    train_split = str(config.get("train_split", "train"))
+    eval_split = str(config.get("eval_split", "test"))
+    # For BABEL, the historical split name ``test`` denotes processed
+    # validation. HumanML3D can explicitly use ``val`` during training.
     dsets, L = cmf.get_loader(
-        D, split=["train", "test"], data_config=datamodule)
+        D, split=[train_split, eval_split], data_config=datamodule)
     
     # The following code is written for fine-tuning the language model using LoRA technology
     if config.resume:
@@ -40,7 +43,8 @@ def train(config: DictConfig):
         ckpt_dir = os.path.join(str(config.path.code_dir), ckpt_dir)
         OmegaConf.update(config, "model.text.ckpt_dir", ckpt_dir, force_add=True)
 
-    net, init_step = cmf.factory_model(config, dsets["train"], it_logger)
+    net, init_step = cmf.factory_model(
+        config, dsets[train_split], it_logger)
 
     it_logger.info('\nTotal params: %.2fM' % (sum(p.numel() for p in net.parameters() if p.requires_grad) / 1000000.0))
 
@@ -58,26 +62,27 @@ def train(config: DictConfig):
     if vis_every > 0:
         # Half of the training set data, half of the validation set data
         nsamples = config.machine["vis_nsamples"]
-        vis_data = dsets["train"].get_samples(int(nsamples / 2))
-        vis_data.extend(dsets["test"].get_samples(int(nsamples / 2)))
-        vis_data = dsets["train"].collate_fn(vis_data)
+        vis_data = dsets[train_split].get_samples(int(nsamples / 2))
+        vis_data.extend(dsets[eval_split].get_samples(int(nsamples / 2)))
+        vis_data = dsets[train_split].collate_fn(vis_data)
         vis_inp, vis_gt = net.prepare_batch(vis_data)
         net.visualize(vis_inp, vis_gt, "epoch{:0>3d}".format(0))
 
     # We evaluate initialized model
-    cmf.test(config, L["test"], net, 0, eval_logger, mode="Valid")
+    cmf.test(config, L[eval_split], net, 0, eval_logger, mode="Valid")
     ii = 1
     net.train_mode()  # set network as train mode
     net.reset_status()  # initialize status
     tm = timer.Timer()  # tm: timer
-    print("=====> # of iteration per one epoch: {}".format(len(L["train"])))
+    print("=====> # of iteration per one epoch: {}".format(
+        len(L[train_split])))
     # Set the total training step
-    net.set_step_epoch(len(L["train"]), num_step)
+    net.set_step_epoch(len(L[train_split]), num_step)
     for epoch in range(init_step, num_step + 1):
         # curriculum learning
         if (apply_cl_after > 0) and (epoch == apply_cl_after):
             net.apply_curriculum_learning()
-        for batch in tqdm(L["train"]):
+        for batch in tqdm(L[train_split]):
 
             # Forward and update the network
             data_load_duration = tm.get_duration()
@@ -99,7 +104,7 @@ def train(config: DictConfig):
 
             # for debugging
             if config.debug and (ii > 2):
-                cmf.test(config, L["test"], net, 0, eval_logger, mode="Test")
+                cmf.test(config, L[eval_split], net, 0, eval_logger, mode="Test")
                 break
 
             tm.reset()
@@ -117,7 +122,7 @@ def train(config: DictConfig):
             # net.save_results("latest", mode="Train")
             net.print_counters_info(eval_logger, epoch, mode="Train")
 
-            cmf.test(config, L["test"], net, epoch, eval_logger, mode="Test")
+            cmf.test(config, L[eval_split], net, epoch, eval_logger, mode="Test")
 
             net.train_mode()  # set network as train mode
             net.reset_status()  # initialize status

@@ -28,6 +28,8 @@ wandb/
 # Keep released metadata and the small LoRA adapter, but not the 517 MB checkpoint.
 !artifacts/babel_35_3/adapter_model.safetensors
 !artifacts/babel_35_3/adapter_config.json
+!artifacts/humanml3d_49_0/adapter_model.safetensors
+!artifacts/humanml3d_49_0/adapter_config.json
 
 # Licensed datasets, derived features, and downloaded text encoders.
 datasets/*

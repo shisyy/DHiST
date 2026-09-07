@@ -1,7 +1,10 @@
 name: cross entropy loss
-_target_: mlp.losses.ce_loss.CrossEntropyLoss
+_target_: mlp.losses.cross_entropy_loss.CrossEntropyLoss
 
 # smooth: ${model.smooth}
 # extend: ${model.extend}
 # alpha: ${model.alpha}
 pred_lambda: ${model.pred_lambda}
+boundary_smoothing_sigma: ${model.boundary_smoothing_sigma}
+boundary_smoothing_mix: ${model.boundary_smoothing_mix}
+expected_iou_lambda: ${model.expected_iou_lambda}

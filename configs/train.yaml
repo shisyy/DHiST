@@ -7,6 +7,8 @@ hydra:
 
 # Global configurations shared between different modules
 experiment: mlp
+train_split: train
+eval_split: test
 
 
 # breakpoint continue, relative dir of chekcpoint
@@ -27,8 +29,4 @@ defaults:
   - machine: server
   - /path@path
   - _self_
-
-
-
-
 

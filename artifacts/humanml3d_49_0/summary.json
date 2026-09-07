@@ -1,0 +1,49 @@
+{
+  "status": "completed",
+  "checkpoint": {
+    "release_asset": "dhist_humanml3d_49_0_seed123_e15.ckpt.pkl",
+    "size_bytes": 45436766,
+    "sha256": "ba4fd38e3498547fdf13063539a6be25a060ddd8583e7a41c5aa872b034991c7",
+    "format": "dhist-lora-compact-v1",
+    "frozen_text_backbone": "roberta-base",
+    "epoch_field": 16,
+    "iteration_field": 3120
+  },
+  "metrics": {
+    "R1-0.1": 74.42073170731707,
+    "R1-0.3": 63.74999999999999,
+    "R1-0.5": 51.67682926829268,
+    "R1-0.7": 41.1280487804878,
+    "R1-0.9": 15.579268292682928,
+    "R5-0.1": 75.79268292682927,
+    "R5-0.3": 65.21341463414633,
+    "R5-0.5": 53.01829268292683,
+    "R5-0.7": 43.079268292682926,
+    "R5-0.9": 20.79268292682927,
+    "mIoU": 49.07219746660181,
+    "R5-mIoU": 51.1590138999379
+  },
+  "protocol": {
+    "dataset": "HumanML3D",
+    "split": "complete official test; previously exposed diagnostic",
+    "queries": 3280,
+    "motions": 550,
+    "training_split": "standard train",
+    "training_augmentation": false,
+    "inference_label_strategy": "zeros",
+    "label_noise_at_inference": false,
+    "dropout_at_inference": false,
+    "model_decoder_gt_boundary_inputs": false,
+    "ground_truth_usage": "metric computation only",
+    "decoder_inputs": "predicted LP start/end logits only",
+    "segment_iou_source": "qahs",
+    "segment_score_mode": "soft_iou",
+    "segment_iou_weight": 0.0,
+    "segment_masklog_weight": 0.0,
+    "single_checkpoint": true,
+    "ensemble": false,
+    "blind_or_independent_test": false
+  },
+  "label_invariance_all_maxdiff_zero": true,
+  "full_to_compact_reconstructed_state_exact": true
+}

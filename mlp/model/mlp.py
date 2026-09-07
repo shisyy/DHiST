@@ -23,6 +23,7 @@ class MLP(AbstractNetwork):
                  segment_iou_source: str = "qahs",
                  segment_score_mode: str = "soft_iou",
                  segment_masklog_weight: float = 0.0,
+                 preserve_pretrained_text: bool = False,
                  working_dir: str = "",
                  logger=None,
                  **kwargs):
@@ -33,6 +34,7 @@ class MLP(AbstractNetwork):
                                     use_gpu=use_gpu, 
                                     logger=logger)
 
+        self.preserve_pretrained_text = preserve_pretrained_text
         self._build_network(kwargs)
         self._build_evaluator()
         self.save_pred = save_pred
@@ -96,6 +98,18 @@ class MLP(AbstractNetwork):
         self.init_parameters()
 
     def init_parameters(self):
+        saved_text_state = None
+        if self.preserve_pretrained_text:
+            # HumanML3D Round19 was trained with the BABEL-aligned text
+            # initialization: consume the legacy global initializer's RNG
+            # stream, but restore the pretrained RoBERTa backbone and native
+            # LoRA initialization afterwards. BABEL release checkpoints keep
+            # the historical global Xavier behavior for exact compatibility.
+            saved_text_state = {
+                key: value.detach().clone()
+                for key, value in self.text_embedding.text_model.state_dict().items()
+            }
+
         def init_weights(m):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
                 torch.nn.init.xavier_uniform_(m.weight)
@@ -105,6 +119,9 @@ class MLP(AbstractNetwork):
                 m.reset_parameters()
 
         self.apply(init_weights)
+        if saved_text_state is not None:
+            self.text_embedding.text_model.load_state_dict(
+                saved_text_state, strict=True)
 
     def forward(self, net_inps, mode="Train"):
         return self._infer(net_inps, mode)

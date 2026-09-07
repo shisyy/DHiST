@@ -23,6 +23,10 @@ latent_dim: 256
 nums_snippet: 256
 # Using LoRA to finetune RoBERTa
 finetune: true
+# Preserve the pretrained RoBERTa and native LoRA initialization after the
+# legacy global initializer. Required by the released HumanML3D checkpoint;
+# BABEL keeps false for backward-compatible checkpoint reconstruction.
+preserve_pretrained_text: false
 
 # alpha: LPMatcher perturb rate
 alpha: 0.8
@@ -41,6 +45,14 @@ shared: true
 pred_lambda: 1.0
 highlight_lambda: 5.0
 kl_lambda: 1.0
+# Training-loss compatibility switches. Defaults preserve the released BABEL
+# recipe; HumanML3D overrides sigma and KL masking in run_humanml3d_lora.sh.
+boundary_smoothing_sigma: 0.0
+boundary_smoothing_mix: 1.0
+expected_iou_lambda: 0.0
+detach_recovery_teacher: false
+kl_mask_strategy: original
+use_end_label_branch: false
 
 defaults:
   - motion: mo_conv

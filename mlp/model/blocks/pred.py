@@ -60,9 +60,11 @@ class CommonPredictor(nn.Module):
 
 
 class LabelPriorPredictor(nn.Module):
-    def __init__(self, dim, drop_rate=0.0, mask_ratio=0.5):
+    def __init__(self, dim, drop_rate=0.0, mask_ratio=0.5,
+                 use_end_label_branch=False):
         super(LabelPriorPredictor, self).__init__()
         self.label_noise_prob = mask_ratio
+        self.use_end_label_branch = use_end_label_branch
         self.start_encoders = DynamicRNN(dim)
         self.end_encoders = DynamicRNN(dim)
 
@@ -107,7 +109,10 @@ class LabelPriorPredictor(nn.Module):
         start_features = torch.cat((start_features, noised_s_label_queries), dim=1)
         start_features = self.start_encoders(start_features, mask)
         end_features = torch.cat((start_features[:, :len], noised_e_label_queries), dim=1)
-        end_features = self.end_encoders(start_features, mask)
+        # Keep the historical path as the default for checkpoint parity.  The
+        # corrected end-label input is exposed only as an explicit ablation.
+        end_encoder_input = end_features if self.use_end_label_branch else start_features
+        end_features = self.end_encoders(end_encoder_input, mask)
 
         start_features = self.start_block(start_features)  # (batch_size, seq_len, 1)
         end_features = self.end_block(end_features)
@@ -161,7 +166,8 @@ def apply_label_noise(
         p = torch.rand_like(labels.float())
         noised_index = torch.nonzero(p < label_noise_prob).view(-1)
         new_lebels = torch.randint_like(noised_index, 0, num_classes)
-        noised_labels = labels.scatter_(0, noised_index, new_lebels)
+        noised_labels = labels.clone()
+        noised_labels.scatter_(0, noised_index, new_lebels)
         return noised_labels
     else:
         return labels

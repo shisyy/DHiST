@@ -3,3 +3,4 @@ _target_: mlp.model.blocks.pred.LabelPriorPredictor
 dim: ${model.latent_dim}
 drop_rate: ${model.dropout}
 mask_ratio: ${model.beta}
+use_end_label_branch: ${model.use_end_label_branch}

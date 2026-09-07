@@ -18,11 +18,35 @@ from mlp.utils import io_utils, net_utils
 np.set_printoptions(precision=4)
 
 
+def process_one(qid, ann, all_timestamps, feature_dir, max_snippets,
+                highlight_dir, start_dir, end_dir):
+    """Create the query-agnostic supervision used during training."""
+    duration = ann["duration"]
+    nfeats = min(np.load(f"{feature_dir}/{ann['path']}.npy").shape[0],
+                 max_snippets)
+    highlight = np.zeros(nfeats, dtype=np.float32)
+    start = np.zeros(nfeats, dtype=np.float32)
+    end = np.zeros(nfeats, dtype=np.float32)
+    start_indices, end_indices = [], []
+    for timestamp in all_timestamps[qid]:
+        start_index, end_index, _ = net_utils.time_to_index(
+            timestamp[0], timestamp[1], nfeats, duration)
+        highlight[start_index:end_index + 1] += 1
+        start_indices.append(start_index)
+        end_indices.append(end_index)
+    start[start_indices] = 1.0 / len(start_indices)
+    end[end_indices] = 1.0 / len(end_indices)
+    np.save(os.path.join(highlight_dir, qid), highlight)
+    np.save(os.path.join(start_dir, qid), start)
+    np.save(os.path.join(end_dir, qid), end)
+
+
 def create_loaders(split, data_config: DictConfig):
     dsets, L = {}, {}
     for di, dt in enumerate(split):
-        shuffle = True if dt == "train" else False
-        drop_last = True if dt == "train" else False
+        is_training_split = dt == "train" or dt.startswith("train_")
+        shuffle = is_training_split
+        drop_last = is_training_split
         dsets[dt] = instantiate(data_config, split=dt)
         L[dt] = data.DataLoader(
             dsets[dt],
@@ -45,10 +69,13 @@ class H3DDataset(AbstractDataset):
                  training_checked: bool,
                  batch_size: int,
                  t2s_model,
+                 cache_root: str = "",
+                 all_h_label_mode: str = "sigmoid_count",
                  split: str = "train",
                  extend: float = 0.0,
                  before_norm: bool = False,
                  in_memory: bool = False,
+                 prediction_only_labels: bool = False,
                  debug: bool = False,
                  **kwargs):
         super(H3DDataset, self).__init__()
@@ -64,15 +91,42 @@ class H3DDataset(AbstractDataset):
         self.batch_size = batch_size
         self.debug = debug
         self.before_norm = before_norm
+        self.prediction_only_labels = prediction_only_labels
+        self.all_h_label_mode = all_h_label_mode
 
         # get paths for proposals and captions
         paths, ts_ckd_path = self._get_data_path(split, nums_snippet, threshold, labelpath)
 
         # create labels (or load existing one)
         ann_path = os.path.join(self.label_dir, f"{dataname}.json")
-        self.anns, self.qids, self.mpaths, self.checked_timestamps = self._load_annotation(ann_path, t2s_model, threshold, ts_ckd_path)
-        if not self._exist_data(paths):
-            self.generate_labels()
+        self.anns, self.qids, self.mpaths, self.checked_timestamps = self._load_annotation(
+            ann_path, t2s_model, threshold, ts_ckd_path,
+            prediction_only=prediction_only_labels)
+
+        if not self.prediction_only_labels:
+            video_timestamps = {}
+            for ann in self.anns.values():
+                video_timestamps.setdefault(ann["path"], []).append(
+                    ann["timestamps"])
+            self.all_timestamps = {
+                qid: video_timestamps[ann["path"]]
+                for qid, ann in self.anns.items()
+            }
+            cache_root = cache_root or os.path.join(
+                self.label_dir, "preprocess", "segment_priors")
+            self.all_seg_path_h = os.path.join(
+                cache_root, f"all_h_scores_{self.split}")
+            self.all_seg_path_s = os.path.join(
+                cache_root, f"all_s_scores_{self.split}")
+            self.all_seg_path_e = os.path.join(
+                cache_root, f"all_e_scores_{self.split}")
+            for directory in (
+                    self.all_seg_path_h, self.all_seg_path_s,
+                    self.all_seg_path_e):
+                os.makedirs(directory, exist_ok=True)
+            self.ensure_all_seg_scores()
+            if not self._exist_data(paths):
+                self.generate_labels()
         del t2s_model
 
         # load features if use in_memory
@@ -82,15 +136,22 @@ class H3DDataset(AbstractDataset):
                 feature = np.load(f"{self.feature_dir}/{mid}.npy")
                 self.feats[mid] = self.visual_feature_sampling(feature, self.S)
 
-            self.s_pos, self.e_pos, self.att_mask, self.s_label, self.e_label, self.h_label = {}, {}, {}, {}, {}, {}
-            suffix_key = 'ckd' if self.training_checked else 'gt'
-            grd_info = io_utils.load_hdf5(self.paths["grounding_info"], False)
-            for k in tqdm(self.qids, desc="In-Memory: grounding"):
-                self.s_pos[k] = grd_info["start_pos/" + k][()]
-                self.e_pos[k] = grd_info["end_pos/" + k][()]
-                self.h_label[k] = grd_info[f"h_label_{suffix_key}/{k}"][()]
-                self.s_label[k] = grd_info[f"s_label_{suffix_key}/{k}"][()]
-                self.e_label[k] = grd_info[f"e_label_{suffix_key}/{k}"][()]
+            if not self.prediction_only_labels:
+                self.s_label, self.e_label, self.h_label = {}, {}, {}
+                self.s_label_all, self.e_label_all, self.h_label_all = {}, {}, {}
+                suffix_key = 'ckd' if self.training_checked else 'gt'
+                grd_info = io_utils.load_hdf5(
+                    self.paths["grounding_info"], False)
+                for k in tqdm(self.qids, desc="In-Memory: grounding"):
+                    self.h_label[k] = grd_info[f"h_label_{suffix_key}/{k}"][()]
+                    self.s_label[k] = grd_info[f"s_label_{suffix_key}/{k}"][()]
+                    self.e_label[k] = grd_info[f"e_label_{suffix_key}/{k}"][()]
+                    self.h_label_all[k] = np.load(os.path.join(
+                        self.all_seg_path_h, f"{k}.npy"))
+                    self.s_label_all[k] = np.load(os.path.join(
+                        self.all_seg_path_s, f"{k}.npy"))
+                    self.e_label_all[k] = np.load(os.path.join(
+                        self.all_seg_path_e, f"{k}.npy"))
         
         if self.before_norm:
             self.mean = np.load(pjoin(labelpath, "Mean.npy"))
@@ -100,6 +161,21 @@ class H3DDataset(AbstractDataset):
     
     def inv_transform(self, data):
         return data * self.std + self.mean
+
+    def ensure_all_seg_scores(self):
+        """Generate annotation-derived targets for supervised training only."""
+        for qid, ann in tqdm(self.anns.items(), desc="Gen. segment priors"):
+            destinations = (
+                os.path.join(self.all_seg_path_h, f"{qid}.npy"),
+                os.path.join(self.all_seg_path_s, f"{qid}.npy"),
+                os.path.join(self.all_seg_path_e, f"{qid}.npy"),
+            )
+            if all(os.path.isfile(path) for path in destinations):
+                continue
+            process_one(
+                qid, ann, self.all_timestamps, self.feature_dir, self.S,
+                self.all_seg_path_h, self.all_seg_path_s,
+                self.all_seg_path_e)
 
     def __getitem__(self, idx):
         # get query id and corresponding video id
@@ -111,15 +187,6 @@ class H3DDataset(AbstractDataset):
         duration = self.anns[qid]["duration"]
         query = self.anns[qid]["query"]
         suffix_key = 'ckd' if self.training_checked else 'gt'
-
-        # get grounding label
-        if self.in_memory:
-            start_label = self.s_label[qid]
-            end_label = self.e_label[qid]
-        else:
-            grd_info = io_utils.load_hdf5(self.paths["grounding_info"], False)
-            start_label = grd_info[f"s_label_{suffix_key}/{qid}"][()]
-            end_label = grd_info[f"e_label_{suffix_key}/{qid}"][()]
 
         # get video features
         if self.in_memory:
@@ -136,11 +203,44 @@ class H3DDataset(AbstractDataset):
 
         mid_mask = np.ones((nfeats))
 
-        # get highlight label
-        if self.in_memory:
-            h_label = self.h_label[qid]
+        if self.prediction_only_labels:
+            # Evaluation never reads annotation-derived training targets.  The
+            # timestamps above are retained exclusively for metric computation.
+            h_label = np.zeros(nfeats, dtype=np.int32)
+            start_label = np.zeros(nfeats, dtype=np.float32)
+            end_label = np.zeros(nfeats, dtype=np.float32)
+            h_label_all = np.zeros(nfeats, dtype=np.float32)
+            start_label_all = np.zeros(nfeats, dtype=np.float32)
+            end_label_all = np.zeros(nfeats, dtype=np.float32)
         else:
-            h_label = grd_info[f"h_label_{suffix_key}/{qid}"][()]
+            if self.in_memory:
+                h_label = self.h_label[qid]
+                start_label = self.s_label[qid]
+                end_label = self.e_label[qid]
+                h_label_all = self.h_label_all[qid]
+                start_label_all = self.s_label_all[qid]
+                end_label_all = self.e_label_all[qid]
+            else:
+                grd_info = io_utils.load_hdf5(
+                    self.paths["grounding_info"], False)
+                h_label = grd_info[f"h_label_{suffix_key}/{qid}"][()]
+                start_label = grd_info[f"s_label_{suffix_key}/{qid}"][()]
+                end_label = grd_info[f"e_label_{suffix_key}/{qid}"][()]
+                h_label_all = np.load(os.path.join(
+                    self.all_seg_path_h, f"{qid}.npy"))
+                start_label_all = np.load(os.path.join(
+                    self.all_seg_path_s, f"{qid}.npy"))
+                end_label_all = np.load(os.path.join(
+                    self.all_seg_path_e, f"{qid}.npy"))
+            if self.all_h_label_mode == "sigmoid_count":
+                h_label_all = 1.0 / (1.0 + np.exp(-h_label_all))
+            elif self.all_h_label_mode == "binary":
+                h_label_all = (h_label_all > 0).astype(np.float32)
+            elif self.all_h_label_mode == "normalized_count":
+                h_label_all = h_label_all / max(float(h_label_all.max()), 1.0)
+            else:
+                raise ValueError(
+                    f"unknown all_h_label_mode: {self.all_h_label_mode}")
 
         instance = {
             "mids": mid,
@@ -155,6 +255,9 @@ class H3DDataset(AbstractDataset):
             "grounding_h_labels": torch.IntTensor(h_label),
             "grounding_s_labels": torch.FloatTensor(start_label),
             "grounding_e_labels": torch.FloatTensor(end_label),
+            "grounding_h_labels_all": torch.FloatTensor(h_label_all),
+            "grounding_s_labels_all": torch.FloatTensor(start_label_all),
+            "grounding_e_labels_all": torch.FloatTensor(end_label_all),
         }
 
         return instance
@@ -180,7 +283,9 @@ class H3DDataset(AbstractDataset):
     def collate_fn(self, data):
         seq_items = [
             "motion_feats", "motion_masks",
-            "grounding_h_labels", "grounding_s_labels", "grounding_e_labels"
+            "grounding_h_labels", "grounding_s_labels", "grounding_e_labels",
+            "grounding_h_labels_all", "grounding_s_labels_all",
+            "grounding_e_labels_all"
         ]
         tensor_items = [
             "nfeats"
@@ -222,7 +327,8 @@ class H3DDataset(AbstractDataset):
         }
         return self.paths, query_info_path
 
-    def _load_annotation(self, ann_path, t2s_model, threshold_selfsim, ts_ckd_path):
+    def _load_annotation(self, ann_path, t2s_model, threshold_selfsim,
+                         ts_ckd_path, prediction_only=False):
         """ Load annotations
         Args:
             ann_paths: path for annotations; list or string
@@ -234,7 +340,7 @@ class H3DDataset(AbstractDataset):
         qid = 0
         new_anns = dict()
         preload = False
-        if os.path.exists(ts_ckd_path):
+        if not prediction_only and os.path.exists(ts_ckd_path):
             preload = True
             with open(ts_ckd_path, "r") as f:
                 checked_timestamps = json.load(f)
@@ -270,7 +376,7 @@ class H3DDataset(AbstractDataset):
                 })
                 mpaths.append(item['path'])
 
-            if not preload and len(label_anns) > 0:
+            if not prediction_only and not preload and len(label_anns) > 0:
                 # Record moments with similar queries in one motion
                 sent_embs= t2s_model([x['query'] for x in label_anns])
                 # put the threshold value between -1 and 1
@@ -279,14 +385,16 @@ class H3DDataset(AbstractDataset):
                 selfsim_idxs = [torch.nonzero(row_mask).squeeze().tolist() for row_mask in selfsim > real_threshold_selfsim]
                 selfsim_idxs = [[ind] if isinstance(ind, int) else ind for ind in selfsim_idxs]
             for id, label_ann in enumerate(label_anns):
-                if not preload:
+                if prediction_only:
+                    checked_timestamps[str(qid)] = [label_ann["timestamps"]]
+                elif not preload:
                     # Save all assigned timestamps
                     # remove identical moments for HumanML3D
                     checked_timestamps[str(qid)] = list(set([tuple(label_anns[j]["timestamps"]) for j in selfsim_idxs[id]]))
                 new_anns[str(qid)] = label_ann
                 qid += 1
 
-        if not preload:
+        if not prediction_only and not preload:
             ckd_ts_str = json.dumps(checked_timestamps)
             with open(ts_ckd_path, 'w') as f:
                 f.write(ckd_ts_str)

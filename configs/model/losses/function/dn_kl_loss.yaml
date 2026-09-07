@@ -3,3 +3,5 @@ _target_: mlp.losses.dn_kl_loss.KLLoss
 
 kl_lambda: ${model.kl_lambda}
 t: 1.0
+detach_recovery_teacher: ${model.detach_recovery_teacher}
+mask_strategy: ${model.kl_mask_strategy}

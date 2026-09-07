@@ -1,0 +1,17 @@
+{
+  "compact": {
+    "epoch": 16,
+    "iteration": 3120,
+    "reconstructed_state_sha256": "9bd33387954b1e3e7775119c85b0de36986bde57421f2aeb7a7d7256582b48d1",
+    "tensor_bytes": 541490496,
+    "tensor_count": 581
+  },
+  "exact_state_match": true,
+  "full": {
+    "epoch": 16,
+    "iteration": 3120,
+    "reconstructed_state_sha256": "9bd33387954b1e3e7775119c85b0de36986bde57421f2aeb7a7d7256582b48d1",
+    "tensor_bytes": 541490496,
+    "tensor_count": 581
+  }
+}

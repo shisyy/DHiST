@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-evaluate the verified BABEL checkpoint with prediction-only inference.
+"""Evaluate a verified DHiST checkpoint with prediction-only inference.
 
 All label-like tensors are forced to zero before the accepted full evaluation.
 Ground-truth timestamps are retained only by the metric accumulator.  A separate
@@ -96,43 +96,39 @@ def write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
 
 
-def main() -> None:
+def main(default_dataset: str = "babel") -> None:
     repository = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(
-        description="Evaluate the released DHiST BABEL checkpoint without GT inputs."
+        description="Evaluate a released DHiST checkpoint without GT inputs."
     )
+    parser.add_argument(
+        "--dataset", choices=("babel", "humanml3d"), default=default_dataset)
     parser.add_argument("--project", type=Path, default=repository)
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=repository / "artifacts" / "babel_35_3" / "config.yaml",
-    )
-    parser.add_argument(
-        "--checkpoint",
-        type=Path,
-        default=repository / "artifacts" / "babel_35_3" / "ckpt.pkl",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=repository / "outputs" / "babel_35_3_eval",
-    )
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--split", default="test")
-    parser.add_argument("--segment-iou-weight", type=float, default=40.0)
-    parser.add_argument("--segment-masklog-weight", type=float, default=12.0)
+    parser.add_argument("--segment-iou-weight", type=float)
+    parser.add_argument("--segment-masklog-weight", type=float)
     args = parser.parse_args()
 
     project = args.project.resolve()
-    config_path = args.config.resolve()
-    checkpoint = args.checkpoint.resolve()
-    output = args.output.resolve()
+    artifact = "babel_35_3" if args.dataset == "babel" else "humanml3d_49_0"
+    config_path = (args.config or project / "artifacts" / artifact / "config.yaml").resolve()
+    checkpoint = (args.checkpoint or project / "artifacts" / artifact / "ckpt.pkl").resolve()
+    output = (args.output or project / "outputs" / f"{artifact}_eval").resolve()
     output.mkdir(parents=True, exist_ok=True)
     status_path = output / "status.json"
     write_json(status_path, {
         "status": "running",
         "started_unix": time.time(),
+        "dataset": args.dataset,
         "inference_label_strategy": "zeros",
-        "decoder_inputs": "predicted LP logits and predicted highlight scores only",
+        "decoder_inputs": (
+            "predicted LP logits and predicted highlight scores only"
+            if args.dataset == "babel" else
+            "predicted LP start/end logits only"
+        ),
     })
 
     os.chdir(project)
@@ -144,7 +140,8 @@ def main() -> None:
         raise FileNotFoundError(f"Configuration not found: {config_path}")
     if not checkpoint.is_file():
         raise FileNotFoundError(
-            f"Checkpoint not found: {checkpoint}. Run scripts/download_checkpoint.py first."
+            f"Checkpoint not found: {checkpoint}. Run "
+            f"scripts/download_checkpoint.py --dataset {args.dataset} first."
         )
 
     config = OmegaConf.load(config_path)
@@ -153,16 +150,36 @@ def main() -> None:
     config.path.code_dir = str(project)
     config.path.working_dir = str(output)
     config.data.datapath = str(project / "datasets" / "motions" / "guoh3dfeats")
-    config.data.labelpath = str(project / "datasets" / "babel")
+    config.data.labelpath = str(project / "datasets" / args.dataset)
     config.data.prediction_only_labels = True
+    if args.dataset == "humanml3d":
+        # Prediction-only HumanML3D loading needs neither annotation-derived
+        # segment-prior caches nor the MPNet similarity model.
+        config.data.t2s_model = None
+        OmegaConf.update(
+            config, "data.cache_root",
+            str(project / "datasets" / "humanml3d" / "cache"),
+            force_add=True)
     config.resume = ""
     config.model.text.ckpt_dir = str(checkpoint.parent)
-    config.model.eval_checked = True
+    config.model.eval_checked = args.dataset == "babel"
     config.model.save_pred = True
-    config.model.segment_iou_weight = float(args.segment_iou_weight)
-    config.model.segment_iou_source = "highlight"
-    config.model.segment_score_mode = "soft_iou"
-    config.model.segment_masklog_weight = float(args.segment_masklog_weight)
+    if args.dataset == "babel":
+        # Locked decoder for the released 35.4063 checkpoint.
+        config.model.segment_iou_source = "highlight"
+        config.model.segment_score_mode = "soft_iou"
+        config.model.segment_iou_weight = float(
+            40.0 if args.segment_iou_weight is None else args.segment_iou_weight)
+        config.model.segment_masklog_weight = float(
+            12.0 if args.segment_masklog_weight is None
+            else args.segment_masklog_weight)
+    else:
+        # Round19 HumanML3D uses the native LP start/end decoder.
+        config.model.segment_iou_weight = float(
+            0.0 if args.segment_iou_weight is None else args.segment_iou_weight)
+        config.model.segment_masklog_weight = float(
+            0.0 if args.segment_masklog_weight is None
+            else args.segment_masklog_weight)
     OmegaConf.save(config, output / "effective_eval_config.yaml")
     cmf.seed_everything(int(config.seed))
 
@@ -209,7 +226,9 @@ def main() -> None:
     net.reset_status()
     net.reset_counters()
     with torch.no_grad():
-        for batch in tqdm(loaders[args.split], desc="BABEL prediction-only"):
+        for batch in tqdm(
+                loaders[args.split],
+                desc=f"{args.dataset} prediction-only"):
             inputs, ground_truth = net.prepare_batch(batch)
             zero_labels(inputs)
             outputs = net.forward_only(inputs, "Test")
@@ -221,17 +240,32 @@ def main() -> None:
     summary = {
         "status": "completed",
         "protocol": {
-            "split": f"{args.split} (BABEL validation protocol)",
+            "dataset": args.dataset,
+            "split": (
+                f"{args.split} (processed BABEL validation protocol)"
+                if args.dataset == "babel" else
+                f"{args.split} (HumanML3D official split; test-exposed diagnostic)"
+            ),
             "inference_label_strategy": "zeros",
             "label_noise_at_inference": False,
             "dropout_at_inference": False,
             "model_decoder_gt_boundary_inputs": False,
             "ground_truth_usage": "metric computation only",
-            "decoder_inputs": "predicted LP logits and predicted highlight scores only",
-            "segment_iou_source": "highlight",
-            "segment_score_mode": "soft_iou",
-            "segment_iou_weight": float(args.segment_iou_weight),
-            "segment_masklog_weight": float(args.segment_masklog_weight),
+            "decoder_inputs": (
+                "predicted LP logits and predicted highlight scores only"
+                if args.dataset == "babel" else
+                "predicted LP start/end logits only"
+            ),
+            "segment_iou_source": str(
+                config.model.get("segment_iou_source", "qahs")),
+            "segment_score_mode": str(
+                config.model.get("segment_score_mode", "soft_iou")),
+            "segment_iou_weight": float(
+                config.model.get("segment_iou_weight", 0.0)),
+            "segment_masklog_weight": float(
+                config.model.get("segment_masklog_weight", 0.0)),
+            "single_checkpoint": True,
+            "ensemble": False,
         },
         "checkpoint": {
             "path": str(checkpoint),
