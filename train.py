@@ -19,6 +19,12 @@ def _train(cfg: DictConfig):
 def train(config: DictConfig):
     """ Training the network """
 
+    if config.data.dataname != "babel":
+        raise ValueError(
+            "This release provides BABEL training only. For HumanML3D, use "
+            "the released checkpoint with eval_predonly.py --dataset humanml3d."
+        )
+
     # create loggers
     it_logger = cmf.create_logger(config, "ITER", "train.log")
     eval_logger = cmf.create_logger(config, "EPOCH", "scores.log")
@@ -32,7 +38,7 @@ def train(config: DictConfig):
     train_split = str(config.get("train_split", "train"))
     eval_split = str(config.get("eval_split", "test"))
     # For BABEL, the historical split name ``test`` denotes processed
-    # validation. HumanML3D can explicitly use ``val`` during training.
+    # validation.
     dsets, L = cmf.get_loader(
         D, split=[train_split, eval_split], data_config=datamodule)
     

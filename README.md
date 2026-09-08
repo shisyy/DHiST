@@ -3,9 +3,10 @@
 Official implementation of **DHiST: Dual-Highlight Spatio-Temporal Learning
 for Temporal Sentence Grounding in 3D Human Motions**.
 
-This is a clean source release for both supported datasets. It contains the
-shared model and training code, dataset-specific configurations, lightweight
-LoRA checkpoints, and audited result metadata. Datasets, motion features,
+This release provides BABEL training code and prediction-only evaluation for
+BABEL and HumanML3D, with lightweight LoRA checkpoints and audited result
+metadata. HumanML3D is released for checkpoint inference and evaluation only;
+its training entry point and training recipe are not provided. Datasets, motion features,
 generated outputs, machine paths, and development history are excluded.
 
 ## Reproduced single-checkpoint results
@@ -26,7 +27,7 @@ Complete R1/R5/mIoU records and protocol metadata are stored under
 Protocol disclosure: BABEL uses this project's validation-selected protocol.
 The HumanML3D result is a previously exposed official-test diagnostic selected
 from the Round19 study. Neither number should be described as a new blind or
-independent test result. The HumanML3D row is the traceable BABEL-aligned
+independent test result. The HumanML3D row is the traceable released
 single checkpoint with mIoU 49.07; it is not the distinct paper row
 50.80/41.58/16.79/49.07.
 
@@ -108,7 +109,7 @@ The evaluator writes `summary.json`, predictions, logs, and a fresh
 label-invariance audit. The compatibility commands `python eval.py` and
 `python eval_humanml3d_predonly.py` select BABEL and HumanML3D respectively.
 
-## Training
+## BABEL training
 
 BABEL's released setup uses seed 42, 100 epochs, batch size 64, AdamW,
 learning rate `2e-4`, decay step 50, `alpha=0.8`, and `beta=0.1`:
@@ -117,18 +118,14 @@ learning rate `2e-4`, decay step 50, `alpha=0.8`, and `beta=0.1`:
 bash run_babel_lora.sh 0
 ```
 
-HumanML3D uses the BABEL-aligned Round19 recipe: standard train, no data
-augmentation, seed 123, 25 epochs, Gaussian boundary smoothing sigma 3,
-KL-valid, learning rate `2e-4`, and the pretrained text-backbone-preserving
-initialization path:
-
-```bash
-bash run_humanml3d_lora.sh 0
-```
-
 Training is stochastic, so a new run is not expected to reproduce every
 decimal. Exact metric reproduction is provided by the released checkpoint,
 configuration, deterministic prediction-only evaluator, and SHA-256 checks.
+
+For HumanML3D, use the checkpoint download and evaluation commands above.
+`artifacts/humanml3d_49_0/config.yaml` is an evaluation configuration; it
+contains no optimizer or training schedule. Shared model-construction fields
+are retained for compatibility with the released weights.
 
 ## License and acknowledgments
 

@@ -1,3 +1,5 @@
+# Evaluation-only configuration for the released HumanML3D checkpoint.
+# Shared model/criterion construction fields preserve checkpoint compatibility.
 model:
   motion:
     name: motion_conv_encoder
@@ -55,27 +57,8 @@ model:
       detach_recovery_teacher: false
       mask_strategy: valid
   optim:
-    name: HumanML3D release
-    use_gpu: true
-    batch_size: 64
-    optimizer_type: AdamW
-    betas: [0.9, 0.999]
-    weight_decay: 0.01
-    num_workers: 4
-    num_epochs: 25
-    learning_rate: 0.0002
-    clip_norm: 0.1
-    warmup_proportion: 0.0
-    scheduler_type: step
-    decay_step: 50
-    decay_factor: 0.5
-    vis_every: 200
-    vis_nsamples: 4
-    curriculum_learning_at: -1
-    evaluate_after: -1
-    every_eval: 1
-    after_eval: 0
-    print_every: 200
+    # The shared model constructor reads the dataset identity from this key.
+    # No optimizer is constructed by prediction-only evaluation.
     dataname: humanml3d
   func_grounding:
     name: cross entropy loss
@@ -187,24 +170,7 @@ machine:
   name: HumanML3D release
   use_gpu: true
   batch_size: 64
-  optimizer_type: AdamW
-  betas: [0.9, 0.999]
-  weight_decay: 0.01
   num_workers: 4
-  num_epochs: 25
-  learning_rate: 0.0002
-  clip_norm: 0.1
-  warmup_proportion: 0.0
-  scheduler_type: step
-  decay_step: 50
-  decay_factor: 0.5
-  vis_every: 200
-  vis_nsamples: 4
-  curriculum_learning_at: -1
-  evaluate_after: -1
-  every_eval: 1
-  after_eval: 0
-  print_every: 200
   dataname: humanml3d
 path:
   datasets: ${code_path:./datasets}
@@ -213,12 +179,11 @@ path:
   working_dir: ${working_path:""}
   glove_dir: ${code_path:./glove}
   vocab_path: ${path.glove_dir}/babel_v1.0_release_vocab.pkl
-experiment: humanml3d_babel_aligned_lora
+experiment: humanml3d_checkpoint_eval
 resume: ""
-eval_split: val
+eval_split: test
 seed: 123
 logging:
   print_level: INFO
   write_level: INFO
 debug: false
-train_split: train

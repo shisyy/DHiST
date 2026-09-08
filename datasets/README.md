@@ -25,11 +25,12 @@ validation protocol; it is not an independent blind test.
 Create `datasets/humanml3d/humanml3d.json`. Each top-level motion item must
 contain `path`, `duration`, and an `annotations` list whose entries contain
 `text`, `start`, and `end`. Put official motion IDs, one per line, in
-`datasets/humanml3d/splits/train.txt`, `val.txt`, and `test.txt`, then generate
-the matching Guo motion features.
+`datasets/humanml3d/splits/test.txt`, then generate the matching Guo motion
+features. For evaluation on another split, provide its corresponding split
+file and pass `--split` to the evaluator.
 
-The released HumanML3D checkpoint uses the standard train split without data
-augmentation. Its reported diagnostic uses the complete official test split.
+HumanML3D support is checkpoint inference and evaluation only. Its reported
+diagnostic uses the complete official test split.
 
 ## Expected tree
 
@@ -52,13 +53,11 @@ datasets/
 ├── humanml3d/
 │   ├── humanml3d.json
 │   └── splits/
-│       ├── train.txt
-│       ├── val.txt
 │       └── test.txt
 └── motions/
     └── guoh3dfeats/
 ```
 
-During supervised training, missing query-agnostic segment priors are
+During BABEL supervised training, missing query-agnostic segment priors are
 generated in each dataset's cache directory. Prediction-only evaluation does
 not read or generate those annotation-derived files.
