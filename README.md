@@ -3,11 +3,37 @@
 Official implementation of **DHiST: Dual-Highlight Spatio-Temporal Learning
 for Temporal Sentence Grounding in 3D Human Motions**.
 
+<p align="center">
+  <img src="assets/task_overview.png" width="92%" alt="Temporal sentence grounding in a long 3D human motion sequence">
+</p>
+
+<p align="center"><em>Figure 1. Given a language query and a long, untrimmed 3D human motion, DHiST localizes the corresponding temporal segment.</em></p>
+
+Given a long, untrimmed 3D human motion and a natural-language query, DHiST
+localizes the temporal segment that matches the query.
+
 This release provides BABEL training code and prediction-only evaluation for
 BABEL and HumanML3D, with lightweight LoRA checkpoints and audited result
 metadata. HumanML3D is released for checkpoint inference and evaluation only;
 its training entry point and training recipe are not provided. Datasets, motion features,
 generated outputs, machine paths, and development history are excluded.
+
+## Method
+
+<p align="center">
+  <img src="assets/method_overview.png" width="100%" alt="DHiST architecture">
+</p>
+
+<p align="center"><em>Figure 2. DHiST combines query-agnostic highlighting, global-local spatio-temporal interaction, and query-specific refinement in a coarse-to-fine grounding pipeline.</em></p>
+
+DHiST follows a coarse-to-fine grounding pipeline:
+
+- **Query-Agnostic Highlight Score (QAHS)** predicts motion-level saliency and
+  start/end boundary priors before motion-language interaction.
+- **Global-Local Spatio-Temporal Interaction Module (GL-STIM)** combines
+  sequence-level inter-joint relations with short-range temporal dynamics.
+- **Query-Specific Highlight Score (QSHS)** refines the fused representation
+  according to the input query before final boundary prediction.
 
 ## Reproduced single-checkpoint results
 
@@ -30,6 +56,18 @@ from the Round19 study. Neither number should be described as a new blind or
 independent test result. The HumanML3D row is the traceable released
 single checkpoint with mIoU 49.07; it is not the distinct paper row
 50.80/41.58/16.79/49.07.
+
+## Qualitative results
+
+<p align="center">
+  <img src="assets/qualitative_results.png" width="100%" alt="Qualitative comparison between DHiST and MLP on BABEL">
+</p>
+
+<p align="center"><em>Figure 3. Qualitative comparison between DHiST and MLP on BABEL. The green interval denotes the ground-truth segment.</em></p>
+
+DHiST better separates the queried interval from temporally distant regions
+with similar motion and more accurately localizes short actions such as
+"Look down."
 
 ## Checkpoints
 
